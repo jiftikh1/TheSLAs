@@ -1,75 +1,100 @@
-import { LoginButton } from "@/components/LoginButton";
 import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { getAllSoftwareWithStats, getRecentPosts } from "@/lib/software";
+import { PlatformsView } from "@/components/PlatformsView";
+import Link from "next/link";
 
 export default async function Home() {
-  const session = await auth();
+  const [session, software, recentPostsRaw] = await Promise.all([
+    auth(),
+    getAllSoftwareWithStats(),
+    getRecentPosts({ limit: 8 }),
+  ]);
 
-  // If already logged in, redirect to feed
-  if (session) {
-    redirect("/feed");
-  }
+  const user = session?.user;
+
+  const recentPosts = recentPostsRaw.map((p) => ({
+    id: p.id,
+    content: p.content,
+    dimension: p.dimension as string,
+    trustScore: p.trustScore,
+    software: p.software,
+    author: p.author,
+  }));
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-3xl flex-col items-center gap-12 px-8 py-16">
-        <div className="flex flex-col items-center gap-6 text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            The SLAs
-          </h1>
-          <p className="text-xl text-zinc-600 dark:text-zinc-400">
-            Peer Software Reality Check
-          </p>
-        </div>
+    <div className="min-h-screen bg-zinc-50">
+      {/* Navbar */}
+      <header className="border-b border-zinc-100 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+          <Link href="/" className="flex items-center gap-2">
+            <svg
+              className="h-7 w-7 text-red-600"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            <span className="text-lg font-bold text-zinc-900">The SLAs</span>
+          </Link>
 
-        <div className="max-w-2xl space-y-6 text-center">
-          <p className="text-lg leading-relaxed text-zinc-700 dark:text-zinc-300">
-            Honest, transparent, practitioner-driven insights about software —
-            how it actually works in the real world.
-          </p>
-          <div className="grid gap-4 text-left text-zinc-600 dark:text-zinc-400 sm:grid-cols-2">
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-50">
-                Practitioner Truth
-              </h3>
-              <p className="mt-1 text-sm">
-                Real experiences over vendor marketing
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-50">
-                Anonymous Accountability
-              </h3>
-              <p className="mt-1 text-sm">
-                Verified professionals, anonymous posts
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-50">
-                Multi-Dimensional
-              </h3>
-              <p className="mt-1 text-sm">
-                Not a single score, but a complete picture
-              </p>
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-50">
-                Long-Term Trends
-              </h3>
-              <p className="mt-1 text-sm">
-                Track how software evolves over time
-              </p>
-            </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href={user ? "/software" : "/login"}
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+            >
+              Write a Review
+            </Link>
+
+            {user ? (
+              <div className="flex items-center gap-3">
+                {user.role && (
+                  <span className="hidden text-sm text-zinc-500 sm:block">
+                    {[user.seniority, user.role].filter(Boolean).join(" ")}
+                  </span>
+                )}
+                <Link
+                  href="/me"
+                  className="text-sm text-zinc-500 hover:text-zinc-900"
+                >
+                  My activity
+                </Link>
+                <Link
+                  href="/feed"
+                  className="text-sm text-zinc-500 hover:text-zinc-900"
+                >
+                  Feed
+                </Link>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                  />
+                </svg>
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
+      </header>
 
-        <div className="flex flex-col items-center gap-4">
-          <LoginButton />
-          <p className="text-sm text-zinc-500 dark:text-zinc-500">
-            Sign in to share your insights and learn from peers
-          </p>
-        </div>
-      </main>
+      <PlatformsView
+        software={software}
+        recentPosts={recentPosts}
+        isLoggedIn={!!user}
+      />
     </div>
   );
 }

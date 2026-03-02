@@ -11,6 +11,45 @@ export async function getAllSoftware() {
 }
 
 /**
+ * Get all software with aggregated review stats (review count + star rating)
+ * for the home page catalog view.
+ */
+export async function getAllSoftwareWithStats() {
+  const allSoftware = await prisma.software.findMany({
+    orderBy: { name: "asc" },
+    include: {
+      posts: {
+        where: { moderationStatus: "published" },
+        select: { trustScore: true },
+      },
+    },
+  });
+
+  return allSoftware.map((s) => {
+    const reviewCount = s.posts.length;
+    const avgTrust =
+      reviewCount > 0
+        ? s.posts.reduce((sum, p) => sum + p.trustScore, 0) / reviewCount
+        : null;
+    // Map 0-100 trust score to 0-5 star rating (1 decimal)
+    const starRating =
+      avgTrust !== null ? Math.round((avgTrust / 100) * 5 * 10) / 10 : null;
+
+    return {
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      category: s.category,
+      description: s.description,
+      logoUrl: s.logoUrl,
+      website: s.website,
+      reviewCount,
+      starRating,
+    };
+  });
+}
+
+/**
  * Get software by slug
  */
 export async function getSoftwareBySlug(slug: string) {
