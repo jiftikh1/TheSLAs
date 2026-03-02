@@ -1,0 +1,222 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// NextAuth.js Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  linkedinId    String?   @unique
+  email         String    @unique
+  name          String?
+  image         String?
+
+  // LinkedIn extracted data
+  role          String?
+  industry      String?
+  companySize   String?   // small/medium/large/enterprise
+  seniority     String?   // junior/mid/senior/lead/director/vp/c-level
+
+  // Reputation system (internal only, not displayed)
+  reputationScore Float    @default(0)
+  reputationTier  String   @default("emerging") // emerging/trusted/experienced/system-level
+  lastActiveAt    DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  posts         Post[]
+  validations   Validation[]
+  threads       Thread[]
+  replies       Reply[]
+  postComments  PostComment[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Software Catalog & Content Models
+
+enum Dimension {
+  PARTNERSHIPS
+  INTEGRATIONS
+  WORKFLOWS
+  ISSUES
+}
+
+enum ValidationType {
+  HELPFUL
+  MATCHES_EXPERIENCE
+  LEARNED_SOMETHING
+}
+
+model Software {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  category    String   // CRM, Analytics, Marketing, DevOps, etc.
+  website     String?
+  logoUrl     String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts       Post[]
+  threads     Thread[]
+}
+
+model Post {
+  id              String    @id @default(cuid())
+
+  // Software & Author
+  softwareId      String
+  software        Software  @relation(fields: [softwareId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // Content
+  dimension       Dimension
+  content         String    // Main post content
+
+  // Trust & Quality Scoring
+  trustScore      Float     @default(0)     // 0-100, displayed as Low/Medium/High
+  signalQuality   Float     @default(0)     // 0-100, internal metric
+
+  // Slop Detection
+  slopRisk        Float     @default(0)     // 0-100, high = likely AI slop
+  hasAnchors      Boolean   @default(false) // Has time-in-system indicators
+
+  // Moderation
+  flaggedForPricing Boolean @default(false)
+  moderationStatus  String  @default("published") // published/flagged/removed
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  validations     Validation[]
+  comments        PostComment[]
+
+  @@index([softwareId])
+  @@index([dimension])
+  @@index([createdAt])
+  @@index([trustScore])
+}
+
+model Validation {
+  id        String         @id @default(cuid())
+
+  postId    String
+  post      Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      ValidationType
+
+  createdAt DateTime       @default(now())
+
+  @@unique([postId, userId, type])
+  @@index([postId])
+  @@index([userId])
+}
+
+// Discussion threads (Blind-style)
+
+model Thread {
+  id               String   @id @default(cuid())
+
+  softwareId       String
+  software         Software @relation(fields: [softwareId], references: [id], onDelete: Cascade)
+
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  title            String
+  content          String
+
+  moderationStatus String   @default("published") // published/flagged/removed
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  replies          Reply[]
+
+  @@index([softwareId])
+  @@index([createdAt])
+}
+
+model Reply {
+  id               String   @id @default(cuid())
+
+  threadId         String
+  thread           Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  content          String
+
+  moderationStatus String   @default("published")
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([threadId])
+  @@index([createdAt])
+}
+
+model PostComment {
+  id               String   @id @default(cuid())
+  postId           String
+  post             Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content          String
+  moderationStatus String   @default("published")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([postId])
+  @@index([createdAt])
+}
