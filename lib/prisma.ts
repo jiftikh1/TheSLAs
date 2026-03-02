@@ -2,9 +2,12 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 
 const prismaClientSingleton = () => {
-  // Prisma 7 with libSQL adapter for SQLite
+  const url = process.env.DATABASE_URL || "file:./prisma/dev.db";
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
   const adapter = new PrismaLibSql({
-    url: process.env.DATABASE_URL || "file:./prisma/dev.db",
+    url,
+    ...(authToken ? { authToken } : {}),
   });
 
   return new PrismaClient({ adapter });
