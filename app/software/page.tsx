@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getAllSoftware } from "@/lib/software";
 import { SoftwareSearch } from "@/components/SoftwareSearch";
 import Link from "next/link";

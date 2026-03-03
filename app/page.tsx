@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { auth } from "@/lib/auth";
 import { getAllSoftwareWithStats, getRecentPosts } from "@/lib/software";
 import { PlatformsView } from "@/components/PlatformsView";
