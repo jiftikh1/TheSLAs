@@ -41,6 +41,7 @@ model User {
   id            String    @id @default(cuid())
   linkedinId    String?   @unique
   email         String    @unique
+  emailVerified DateTime?
   name          String?
   image         String?
 
