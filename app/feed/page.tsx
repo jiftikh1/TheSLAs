@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { auth } from "@/lib/auth";
 import { getRecentPosts, getAllSoftware, type Lens } from "@/lib/software";
 import { FeedPostCard } from "@/components/FeedPostCard";
@@ -9,9 +11,9 @@ import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { Dimension } from "@prisma/client";
 import { Suspense } from "react";
+import { Star, MessageSquare, Compass, Plus } from "lucide-react";
 
 const VALID_DIMENSIONS = new Set<string>(Object.values(Dimension));
-
 const VALID_LENSES = new Set<string>(["all", "practitioner", "leader", "user"]);
 
 type Props = {
@@ -31,9 +33,7 @@ export default async function FeedPage({ searchParams }: Props) {
     await searchParams;
 
   const rawDim = dimParam?.toUpperCase() ?? "";
-  const dimension = VALID_DIMENSIONS.has(rawDim)
-    ? (rawDim as Dimension)
-    : undefined;
+  const dimension = VALID_DIMENSIONS.has(rawDim) ? (rawDim as Dimension) : undefined;
   const softwareSlug = swParam || undefined;
   const sort: "latest" | "hot" = sortParam === "hot" ? "hot" : "latest";
   const lens: Lens =
@@ -51,64 +51,95 @@ export default async function FeedPage({ searchParams }: Props) {
   const profileIncomplete = !user?.role;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black">
+    <div className="min-h-screen bg-background">
       {/* Nav */}
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-6">
+      <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <span className="font-display text-sm font-bold text-primary-foreground">SR</span>
+            </div>
+            <span className="font-display text-lg font-bold text-foreground">The SLAs</span>
+          </Link>
+
+          {/* Center tabs */}
+          <div className="hidden items-center gap-1 rounded-lg bg-secondary p-1 md:flex">
             <Link
               href="/feed"
-              className="text-xl font-bold text-zinc-900 dark:text-zinc-50"
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
             >
-              The SLAs
+              <Star className="h-4 w-4" />
+              Reviews
+            </Link>
+            <Link
+              href="/?tab=discussions"
+              className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Discussions
             </Link>
             <Link
               href="/software"
-              className="text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground"
             >
-              Browse software
+              <Compass className="h-4 w-4" />
+              Browse
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+
+          {/* Right */}
+          <div className="flex items-center gap-3">
+            {session.user?.role && (
+              <span className="hidden text-xs text-muted-foreground sm:block">
+                {[session.user.seniority, session.user.role].filter(Boolean).join(" · ")}
+              </span>
+            )}
             <Link
               href="/me"
-              className="text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               My activity
             </Link>
-            <span className="text-sm text-zinc-500 dark:text-zinc-400">
-              {session.user?.role
-                ? `${session.user.seniority ?? ""} ${session.user.role}`.trim()
-                : session.user?.name ?? "Practitioner"}
-            </span>
             <LogoutButton />
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-8">
         {/* Profile completion banner */}
         {profileIncomplete && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/40">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
+            <p className="text-sm text-foreground">
               Complete your profile so your posts show practitioner context.
             </p>
             <Link
               href="/profile/setup"
-              className="shrink-0 rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800 dark:bg-amber-600 dark:hover:bg-amber-700"
+              className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-colors hover:opacity-90"
             >
               Set up profile
             </Link>
           </div>
         )}
 
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-2xl font-bold text-foreground">Latest Reviews</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Honest takes from verified professionals</p>
+          </div>
+          <Link
+            href="/software"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Write Review
+          </Link>
+        </div>
+
         {/* Filter + lens bar */}
         <Suspense fallback={<div className="mb-6 h-24" />}>
           <FeedFilterBar
-            allSoftware={allSoftware.map((s) => ({
-              name: s.name,
-              slug: s.slug,
-            }))}
+            allSoftware={allSoftware.map((s) => ({ name: s.name, slug: s.slug }))}
           />
         </Suspense>
         <Suspense fallback={null}>
@@ -120,7 +151,7 @@ export default async function FeedPage({ searchParams }: Props) {
         {posts.length === 0 ? (
           <EmptyFeed hasFilters={!!(dimension || softwareSlug || lens !== "all")} />
         ) : (
-          <div className="space-y-4">
+          <div className="grid gap-5 md:grid-cols-2">
             {posts.map((post) => (
               <FeedPostCard
                 key={post.id}
@@ -137,19 +168,19 @@ export default async function FeedPage({ searchParams }: Props) {
 
 function EmptyFeed({ hasFilters }: { hasFilters: boolean }) {
   return (
-    <div className="rounded-lg border border-dashed border-zinc-300 bg-white p-16 text-center dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="rounded-xl border border-border bg-card p-16 text-center">
       <div className="mx-auto max-w-sm">
-        <p className="text-base font-medium text-zinc-900 dark:text-zinc-50">
+        <p className="font-display text-base font-medium text-foreground">
           {hasFilters ? "No posts match these filters" : "No insights yet"}
         </p>
-        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="mt-2 text-sm text-muted-foreground">
           {hasFilters
             ? "Try removing some filters or switching dimensions."
-            : "Be the first to share what you know. Browse the software catalog and add a real-world insight."}
+            : "Be the first to share what you know."}
         </p>
         <Link
           href={hasFilters ? "/feed" : "/software"}
-          className="mt-6 inline-block rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="mt-6 inline-block rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
         >
           {hasFilters ? "Clear filters" : "Browse software catalog"}
         </Link>

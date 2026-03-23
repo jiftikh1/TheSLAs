@@ -3,239 +3,466 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { calculatePostScores, getSlopNudge } from "@/lib/scoring";
+import { TOPICS, getTriggeredFollowUps, type Topic, type Question } from "@/lib/review-questions";
+import {
+  Monitor, Zap, Plug, Receipt, Headphones, Rocket, AlertTriangle, Shield,
+  Mic, Star, ChevronLeft, ChevronRight, CheckCircle,
+} from "lucide-react";
 
-type Dimension = "PARTNERSHIPS" | "INTEGRATIONS" | "WORKFLOWS" | "ISSUES";
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Monitor, Zap, Plug, Receipt, Headphones, Rocket, AlertTriangle, Shield,
+};
 
-const DIMENSIONS: {
-  value: Dimension;
-  label: string;
-  placeholder: string;
-}[] = [
-  {
-    value: "PARTNERSHIPS",
-    label: "Partnerships",
-    placeholder:
-      "Describe your experience with the vendor relationship — their responsiveness, roadmap follow-through, escalation paths...",
-  },
-  {
-    value: "INTEGRATIONS",
-    label: "Integrations",
-    placeholder:
-      "What integrations did you build or maintain? What was reliable? What broke? What took far more effort than advertised?",
-  },
-  {
-    value: "WORKFLOWS",
-    label: "Workflows",
-    placeholder:
-      "What does this tool genuinely excel at? Where does it become painful at scale? What workflows hit a wall?",
-  },
-  {
-    value: "ISSUES",
-    label: "Issues",
-    placeholder:
-      "What are the landmines? The things you only discover months in? What do you wish someone had warned you about before go-live?",
-  },
-];
+type Step = "topic" | "stars" | "questions" | "review";
 
 type Props = {
   slug: string;
   softwareName: string;
-  initialDimension: Dimension;
 };
 
-export function SubmitPostForm({ slug, softwareName, initialDimension }: Props) {
+function assembleContent(
+  topic: Topic,
+  answers: Record<string, string>,
+  questionQueue: Question[]
+): string {
+  const lines: string[] = [];
+  for (const q of questionQueue) {
+    const ans = answers[q.id]?.trim();
+    if (!ans) continue;
+    lines.push(`**${q.text}**`);
+    lines.push(ans);
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+function trustLabel(score: number) {
+  if (score >= 67) return { text: "High signal", cls: "text-green-400" };
+  if (score >= 34) return { text: "Medium signal", cls: "text-yellow-400" };
+  return { text: "Low signal", cls: "text-red-400" };
+}
+
+export function SubmitPostForm({ slug, softwareName }: Props) {
   const router = useRouter();
-  const [dimension, setDimension] = useState<Dimension>(initialDimension);
-  const [content, setContent] = useState("");
+
+  const [step, setStep] = useState<Step>("topic");
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [starRating, setStarRating] = useState<number>(0);
+  const [hoveredStar, setHoveredStar] = useState<number>(0);
+
+  // Question queue: starts as coreQuestions, follow-ups inserted dynamically
+  const [questionQueue, setQuestionQueue] = useState<Question[]>([]);
+  const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [insertedFollowUps, setInsertedFollowUps] = useState<Set<string>>(new Set());
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPricingWarning, setShowPricingWarning] = useState(false);
 
-  const charCount = content.trim().length;
-  const tooShort = charCount > 0 && charCount < 50;
+  const currentQuestion = questionQueue[currentQIndex] ?? null;
+  const currentAnswer = currentQuestion ? (answers[currentQuestion.id] ?? "") : "";
+  const currentTrimmed = currentAnswer.trim();
+
+  // Assembled content for scoring/preview
+  const assembledContent = useMemo(() => {
+    if (!selectedTopic) return "";
+    return assembleContent(selectedTopic, answers, questionQueue);
+  }, [selectedTopic, answers, questionQueue]);
 
   const scores = useMemo(() => {
-    if (charCount < 10) return null;
-    return calculatePostScores(content);
-  }, [content, charCount]);
+    if (assembledContent.length < 10) return null;
+    return calculatePostScores(assembledContent);
+  }, [assembledContent]);
 
   const nudge = useMemo(() => {
-    if (!scores || charCount < 50) return null;
-    return getSlopNudge(scores.slopRisk, scores.hasAnchors, charCount);
-  }, [scores, charCount]);
+    if (!scores || assembledContent.length < 50) return null;
+    return getSlopNudge(scores.slopRisk, scores.hasAnchors, assembledContent.length);
+  }, [scores, assembledContent]);
 
-  const activePlaceholder =
-    DIMENSIONS.find((d) => d.value === dimension)?.placeholder ?? "";
-
-  function trustLabel(score: number) {
-    if (score >= 67) return { text: "High confidence", cls: "text-green-600 dark:text-green-400" };
-    if (score >= 34) return { text: "Medium confidence", cls: "text-yellow-600 dark:text-yellow-400" };
-    return { text: "Low confidence", cls: "text-red-500 dark:text-red-400" };
+  // --- Step 0: Topic picker ---
+  if (step === "topic") {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="font-display text-2xl font-bold text-foreground">
+            What are you reviewing?
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pick the area you have the most direct experience with.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {TOPICS.map((topic) => {
+            const Icon = ICON_MAP[topic.icon] ?? Monitor;
+            return (
+              <button
+                key={topic.id}
+                type="button"
+                onClick={() => {
+                  setSelectedTopic(topic);
+                  setQuestionQueue([...topic.coreQuestions]);
+                  setStep("stars");
+                }}
+                className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary/50 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Icon className="h-5 w-5 text-primary" />
+                <span className="font-display text-sm font-semibold text-foreground">
+                  {topic.label}
+                </span>
+                <span className="text-xs text-muted-foreground leading-snug">
+                  {topic.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
-  async function submitPost() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, dimension, content }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Something went wrong");
-        return;
-      }
-      router.push(`/software/${slug}?dimension=${dimension}`);
-      router.refresh();
-    } catch {
-      setError("Network error — please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  // --- Step 1: Star rating ---
+  if (step === "stars" && selectedTopic) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <button
+            type="button"
+            onClick={() => setStep("topic")}
+            className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" /> Back
+          </button>
+          <h2 className="font-display text-2xl font-bold text-foreground">
+            How would you rate{" "}
+            <span className="text-primary">{softwareName}</span> for{" "}
+            <span className="italic">{selectedTopic.label.toLowerCase()}</span>?
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your honest rating — not influenced by marketing.
+          </p>
+        </div>
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (charCount < 50 || submitting) return;
-
-    if (scores?.flaggedForPricing && !showPricingWarning) {
-      setShowPricingWarning(true);
-      return;
-    }
-
-    await submitPost();
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Dimension selector */}
-      <div>
-        <p className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          Which dimension does this cover?
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {DIMENSIONS.map((dim) => (
+        <div className="flex items-center gap-3">
+          {[1, 2, 3, 4, 5].map((n) => (
             <button
-              key={dim.value}
+              key={n}
               type="button"
-              onClick={() => {
-                setDimension(dim.value);
-                setShowPricingWarning(false);
-              }}
-              className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                dimension === dim.value
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-600"
-              }`}
+              onClick={() => setStarRating(n)}
+              onMouseEnter={() => setHoveredStar(n)}
+              onMouseLeave={() => setHoveredStar(0)}
+              className="transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
             >
-              {dim.label}
+              <Star
+                className={`h-10 w-10 transition-colors ${
+                  n <= (hoveredStar || starRating)
+                    ? "fill-accent text-accent"
+                    : "text-muted-foreground"
+                }`}
+              />
             </button>
           ))}
+          {starRating > 0 && (
+            <span className="ml-2 text-sm text-muted-foreground">
+              {["", "Poor", "Fair", "Average", "Good", "Excellent"][starRating]}
+            </span>
+          )}
         </div>
-      </div>
 
-      {/* Textarea */}
-      <div>
-        <label
-          htmlFor="content"
-          className="mb-2 block text-sm font-medium text-zinc-900 dark:text-zinc-50"
-        >
-          Your insight about {softwareName}
-        </label>
-        <textarea
-          id="content"
-          value={content}
-          onChange={(e) => {
-            setContent(e.target.value);
-            setShowPricingWarning(false);
+        <button
+          type="button"
+          disabled={starRating === 0}
+          onClick={() => {
+            setCurrentQIndex(0);
+            setStep("questions");
           }}
-          placeholder={activePlaceholder}
-          rows={9}
-          maxLength={5000}
-          className="w-full resize-y rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm leading-relaxed text-zinc-900 placeholder-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-500"
-        />
-        <div className="mt-1.5 flex items-center justify-between">
-          <span
-            className={`text-xs ${tooShort ? "text-red-500" : "text-zinc-400 dark:text-zinc-500"}`}
-          >
-            {charCount === 0
-              ? "Minimum 50 characters"
-              : tooShort
-                ? `${50 - charCount} more characters needed`
-                : `${charCount} / 5000`}
-          </span>
-          {scores && charCount >= 50 && (() => {
-            const t = trustLabel(scores.trustScore);
-            return (
-              <span className={`text-xs font-medium ${t.cls}`}>{t.text}</span>
-            );
-          })()}
-        </div>
+          className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Continue <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
+    );
+  }
 
-      {/* Slop nudge */}
-      {nudge && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/40">
-          <p className="text-sm text-amber-800 dark:text-amber-300">{nudge}</p>
-        </div>
-      )}
+  // --- Step 2: Question interview ---
+  if (step === "questions" && selectedTopic && currentQuestion) {
+    const isRequired = currentQuestion.required;
+    const canProceed = !isRequired || currentTrimmed.length >= 50;
+    const isLast = currentQIndex === questionQueue.length - 1;
+    const tooShort = isRequired && currentTrimmed.length > 0 && currentTrimmed.length < 50;
 
-      {/* Pricing warning */}
-      {showPricingWarning && (
-        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800/60 dark:bg-orange-950/40">
-          <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
-            Pricing language detected
-          </p>
-          <p className="mt-1 text-sm text-orange-700 dark:text-orange-300">
-            The SLAs focuses on operational insights, not pricing or contract
-            terms. This post will be published but flagged for review. Consider
-            removing pricing specifics to keep it focused on real-world
-            experience.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setShowPricingWarning(false)}
-              className="rounded-md border border-orange-300 bg-white px-3 py-1.5 text-xs font-medium text-orange-800 hover:bg-orange-50 dark:border-orange-700 dark:bg-transparent dark:text-orange-300"
-            >
-              Edit content
-            </button>
-            <button
-              type="button"
-              onClick={submitPost}
-              disabled={submitting}
-              className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-            >
-              {submitting ? "Publishing..." : "Submit anyway"}
-            </button>
+    function handleNext() {
+      if (!canProceed) return;
+
+      // Check follow-up triggers on the current answer
+      const triggered = getTriggeredFollowUps(currentTrimmed, currentQuestion);
+      const newQueue = [...questionQueue];
+      let insertOffset = 0;
+
+      for (const fu of triggered) {
+        if (!insertedFollowUps.has(fu.id)) {
+          newQueue.splice(currentQIndex + 1 + insertOffset, 0, fu);
+          insertOffset++;
+          setInsertedFollowUps((prev) => new Set(prev).add(fu.id));
+        }
+      }
+
+      setQuestionQueue(newQueue);
+
+      if (currentQIndex < newQueue.length - 1) {
+        setCurrentQIndex((i) => i + 1);
+      } else {
+        setStep("review");
+      }
+    }
+
+    function handleBack() {
+      if (currentQIndex > 0) {
+        setCurrentQIndex((i) => i - 1);
+      } else {
+        setStep("stars");
+      }
+    }
+
+    const progressPct = Math.round(((currentQIndex + 1) / questionQueue.length) * 100);
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Mic className="h-4 w-4 text-primary" />
+            <span className="font-medium text-primary">{selectedTopic.label}</span>
+            <span>·</span>
+            <span>
+              Question {currentQIndex + 1} of {questionQueue.length}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="h-1.5 w-full rounded-full bg-secondary">
+            <div
+              className="h-1.5 rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
         </div>
-      )}
 
-      {/* General error */}
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/60 dark:bg-red-950/40">
-          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      {/* Footer: anon note + submit */}
-      {!showPricingWarning && (
-        <div className="flex items-center justify-between border-t border-zinc-100 pt-4 dark:border-zinc-800">
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
-            Published anonymously — only your role and seniority are visible.
+        {/* Question */}
+        <div>
+          <p className="font-display text-xl font-semibold text-foreground leading-snug">
+            {currentQuestion.text}
           </p>
+          {currentQIndex === 0 && (
+            <p className="mt-1 text-sm text-muted-foreground italic">
+              Let&apos;s talk about {selectedTopic.label.toLowerCase()}. Be specific — the more concrete, the more valuable your review.
+            </p>
+          )}
+        </div>
+
+        {/* Textarea */}
+        <div>
+          <textarea
+            value={currentAnswer}
+            onChange={(e) =>
+              setAnswers((prev) => ({ ...prev, [currentQuestion.id]: e.target.value }))
+            }
+            placeholder={currentQuestion.placeholder}
+            rows={6}
+            maxLength={1500}
+            className="w-full resize-y rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed text-foreground placeholder-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className={`text-xs ${tooShort ? "text-destructive" : "text-muted-foreground"}`}>
+              {!isRequired
+                ? "Optional — skip if not applicable"
+                : currentTrimmed.length === 0
+                ? "Minimum 50 characters"
+                : tooShort
+                ? `${50 - currentTrimmed.length} more characters needed`
+                : `${currentTrimmed.length} / 1500`}
+            </span>
+            {scores && assembledContent.length >= 50 && (() => {
+              const t = trustLabel(scores.trustScore);
+              return <span className={`text-xs font-medium ${t.cls}`}>{t.text}</span>;
+            })()}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between border-t border-border pt-4">
           <button
-            type="submit"
-            disabled={charCount < 50 || submitting}
-            className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            type="button"
+            onClick={handleBack}
+            className="flex items-center gap-1 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            {submitting ? "Publishing..." : "Publish insight"}
+            <ChevronLeft className="h-4 w-4" /> Back
+          </button>
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={isRequired && !canProceed}
+            className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isLast ? "Preview review" : !isRequired && !currentTrimmed ? "Skip" : "Next"}
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-      )}
-    </form>
-  );
+      </div>
+    );
+  }
+
+  // --- Step 3: Review & submit ---
+  if (step === "review" && selectedTopic) {
+    async function doSubmit(force = false) {
+      if (!selectedTopic) return;
+      if (scores?.flaggedForPricing && !force) {
+        setShowPricingWarning(true);
+        return;
+      }
+      setSubmitting(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug,
+            dimension: selectedTopic.dimension,
+            content: assembledContent,
+            starRating,
+            topic: selectedTopic.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "Something went wrong");
+          return;
+        }
+        router.push(`/software/${slug}?dimension=${selectedTopic.dimension}`);
+        router.refresh();
+      } catch {
+        setError("Network error — please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setStep("questions")}
+            className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" /> Back
+          </button>
+          <div className="flex items-center gap-3">
+            <CheckCircle className="h-6 w-6 text-primary" />
+            <h2 className="font-display text-2xl font-bold text-foreground">
+              Review your submission
+            </h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This is how your review will appear — published anonymously.
+          </p>
+        </div>
+
+        {/* Preview card */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          {/* Topic + stars */}
+          <div className="flex items-center justify-between">
+            <span className="rounded-full border border-border px-3 py-0.5 text-xs font-medium text-muted-foreground">
+              {selectedTopic.label}
+            </span>
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Star
+                  key={n}
+                  className={`h-4 w-4 ${n <= starRating ? "fill-accent text-accent" : "text-muted-foreground"}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Assembled content preview */}
+          <div className="max-h-80 overflow-y-auto rounded-lg bg-secondary/30 p-4 text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap font-mono">
+            {assembledContent}
+          </div>
+
+          {/* Trust score */}
+          {scores && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Signal quality:</span>
+              <span className={`font-semibold ${trustLabel(scores.trustScore).cls}`}>
+                {trustLabel(scores.trustScore).text}
+              </span>
+              <span>({Math.round(scores.trustScore)}/100)</span>
+            </div>
+          )}
+        </div>
+
+        {/* Slop nudge */}
+        {nudge && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm text-amber-300">{nudge}</p>
+          </div>
+        )}
+
+        {/* Pricing warning */}
+        {showPricingWarning && (
+          <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-4">
+            <p className="text-sm font-medium text-orange-200">Pricing language detected</p>
+            <p className="mt-1 text-sm text-orange-300/80">
+              This post will be published but flagged for review.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPricingWarning(false)}
+                className="rounded-md border border-orange-500/30 px-3 py-1.5 text-xs font-medium text-orange-300 hover:bg-orange-500/10"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => doSubmit(true)}
+                disabled={submitting}
+                className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                {submitting ? "Publishing..." : "Submit anyway"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
+
+        {/* Footer */}
+        {!showPricingWarning && (
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground">
+              Published anonymously — only role &amp; seniority visible.
+            </p>
+            <button
+              type="button"
+              disabled={submitting || assembledContent.length < 50}
+              onClick={() => doSubmit(false)}
+              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {submitting ? "Publishing..." : "Submit review"}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }

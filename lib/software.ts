@@ -146,6 +146,7 @@ export async function getSoftwarePostsByDimension(
       author: {
         select: {
           id: true,
+          username: true,
           role: true,
           seniority: true,
           industry: true,
@@ -213,6 +214,7 @@ export async function getRecentPosts(filters: FeedFilters | number = {}) {
       author: {
         select: {
           id: true,
+          username: true,
           role: true,
           seniority: true,
           industry: true,

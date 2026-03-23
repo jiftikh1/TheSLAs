@@ -23,6 +23,22 @@ export async function getThreadsBySoftware(softwareId: string) {
 }
 
 /**
+ * Get recent threads across all software for the home page discussions feed
+ */
+export async function getRecentThreads(limit = 8) {
+  return await prisma.thread.findMany({
+    where: { moderationStatus: "published" },
+    include: {
+      software: { select: { id: true, name: true, slug: true } },
+      author: { select: { role: true, seniority: true } },
+      _count: { select: { replies: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
+/**
  * Get a single thread with all replies
  */
 export async function getThreadById(threadId: string) {

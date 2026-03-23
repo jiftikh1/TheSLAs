@@ -1,26 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
 @import "tailwindcss";
 
+@theme {
+  /* Background / Foreground */
+  --color-background: hsl(222, 47%, 7%);
+  --color-foreground: hsl(210, 40%, 93%);
+
+  /* Card */
+  --color-card: hsl(222, 40%, 10%);
+  --color-card-foreground: hsl(210, 40%, 93%);
+
+  /* Primary — teal */
+  --color-primary: hsl(164, 100%, 42%);
+  --color-primary-foreground: hsl(222, 47%, 7%);
+
+  /* Secondary */
+  --color-secondary: hsl(222, 30%, 16%);
+  --color-secondary-foreground: hsl(210, 40%, 85%);
+
+  /* Muted */
+  --color-muted: hsl(222, 25%, 14%);
+  --color-muted-foreground: hsl(215, 20%, 55%);
+
+  /* Accent — amber */
+  --color-accent: hsl(38, 100%, 64%);
+  --color-accent-foreground: hsl(222, 47%, 7%);
+
+  /* Destructive */
+  --color-destructive: hsl(0, 72%, 51%);
+  --color-destructive-foreground: hsl(210, 40%, 98%);
+
+  /* Border / Input / Ring */
+  --color-border: hsl(222, 25%, 18%);
+  --color-input: hsl(222, 25%, 18%);
+  --color-ring: hsl(164, 100%, 42%);
+
+  /* Seniority badge colors */
+  --color-badge-ic: hsl(164, 100%, 42%);
+  --color-badge-lead: hsl(38, 100%, 64%);
+  --color-badge-director: hsl(280, 65%, 60%);
+
+  /* Typography */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  /* Border radius */
+  --radius: 0.75rem;
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --gradient-hero: linear-gradient(180deg, hsl(222, 47%, 9%) 0%, hsl(222, 47%, 5%) 100%);
+  --shadow-card: 0 4px 24px -4px hsl(222 47% 3% / 0.5);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: hsl(222, 47%, 7%);
+  color: hsl(210, 40%, 93%);
+  font-family: "DM Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Space Grotesk", system-ui, sans-serif;
 }

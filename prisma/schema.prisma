@@ -45,6 +45,9 @@ model User {
   name          String?
   image         String?
 
+  // Anonymous display username (generated once, e.g. "AsyncYak")
+  username      String?   @unique
+
   // LinkedIn extracted data
   role          String?
   industry      String?
@@ -119,6 +122,8 @@ model Post {
   // Content
   dimension       Dimension
   content         String    // Main post content
+  starRating      Int?      // 1-5, user-provided
+  topic           String?   // chosen topic label e.g. "Pricing & contracts"
 
   // Trust & Quality Scoring
   trustScore      Float     @default(0)     // 0-100, displayed as Low/Medium/High

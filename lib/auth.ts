@@ -4,12 +4,14 @@ import LinkedIn from "next-auth/providers/linkedin";
 import Credentials from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import { DEV_USERS } from "@/lib/auth-dev";
+import { generateUniqueUsername } from "@/lib/username";
 
 // Extend the built-in session types
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
+      username?: string;
       role?: string;
       industry?: string;
       companySize?: string;
@@ -18,6 +20,7 @@ declare module "next-auth" {
   }
 
   interface User {
+    username?: string;
     role?: string;
     industry?: string;
     companySize?: string;
@@ -26,6 +29,22 @@ declare module "next-auth" {
 }
 
 const isDevelopment = process.env.NODE_ENV === "development";
+
+async function ensureUsername(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true },
+  });
+  if (user?.username) return user.username;
+
+  const username = await generateUniqueUsername(async (candidate) => {
+    const existing = await prisma.user.findUnique({ where: { username: candidate } });
+    return !!existing;
+  });
+
+  await prisma.user.update({ where: { id: userId }, data: { username } });
+  return username;
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -42,11 +61,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             async authorize(credentials) {
               if (!credentials?.email) return null;
 
-              // Find or create dev user
               const devUserTemplate = DEV_USERS.find(
                 (u) => u.email === credentials.email
               );
-
               if (!devUserTemplate) return null;
 
               let user = await prisma.user.findUnique({
@@ -54,17 +71,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               });
 
               if (!user) {
+                const username = await generateUniqueUsername(async (candidate) => {
+                  const existing = await prisma.user.findUnique({ where: { username: candidate } });
+                  return !!existing;
+                });
+
                 user = await prisma.user.create({
                   data: {
                     email: devUserTemplate.email,
                     name: devUserTemplate.name,
                     linkedinId: `dev-${devUserTemplate.email}`,
+                    username,
                     role: devUserTemplate.role,
                     industry: devUserTemplate.industry,
                     companySize: devUserTemplate.companySize,
                     seniority: devUserTemplate.seniority,
                   },
                 });
+              } else if (!user.username) {
+                // Backfill username for existing dev users
+                await ensureUsername(user.id);
+                user = await prisma.user.findUnique({ where: { id: user.id } }) ?? user;
               }
 
               return {
@@ -72,6 +99,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 email: user.email,
                 name: user.name ?? undefined,
                 image: user.image ?? undefined,
+                username: user.username ?? undefined,
                 role: user.role ?? undefined,
                 industry: user.industry ?? undefined,
                 companySize: user.companySize ?? undefined,
@@ -91,8 +119,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
       },
       async profile(profile) {
-        // Extract LinkedIn profile data
-        // Note: LinkedIn API fields may vary based on permissions
+        // LinkedIn OpenID gives us: sub, email, name, given_name, family_name, picture
         return {
           id: profile.sub,
           email: profile.email,
@@ -105,9 +132,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async session({ session, user }) {
-      // Include additional user data in session
       if (session.user) {
         session.user.id = user.id;
+        session.user.username = user.username;
         session.user.role = user.role;
         session.user.industry = user.industry;
         session.user.companySize = user.companySize;
@@ -116,17 +143,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
     async signIn({ user, account, profile }) {
-      // Extract additional data from LinkedIn profile on first sign in
-      if (account?.provider === "linkedin" && profile) {
+      if (account?.provider === "linkedin" && profile && user.id) {
         try {
-          // Update user with LinkedIn data
-          // This is a simplified version - you may need to enhance based on actual LinkedIn API response
+          // Assign username on first LinkedIn sign-in
+          await ensureUsername(user.id);
+
           await prisma.user.update({
             where: { id: user.id },
             data: {
               linkedinId: profile.sub as string,
-              // You can add logic here to extract role, industry, etc. from LinkedIn profile
-              // For MVP, we'll allow users to set these manually later
+              // Name and picture are already handled by the adapter
             },
           });
         } catch (error) {

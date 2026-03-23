@@ -1,8 +1,11 @@
+export const dynamic = "force-dynamic";
+
 import { auth } from "@/lib/auth";
 import { getUserPosts, getUserThreads } from "@/lib/software";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LogoutButton } from "@/components/LogoutButton";
+import { Star, MessageSquare, Compass } from "lucide-react";
 import prisma from "@/lib/prisma";
 
 const DIMENSION_LABELS: Record<string, string> = {
@@ -22,10 +25,12 @@ function formatTimeAgo(date: Date): string {
   return `${Math.floor(diffDays / 365)}y ago`;
 }
 
-function getTrustLabel(score: number) {
-  if (score >= 67) return { label: "High", cls: "text-green-600 dark:text-green-400" };
-  if (score >= 34) return { label: "Medium", cls: "text-yellow-600 dark:text-yellow-400" };
-  return { label: "Low", cls: "text-red-500 dark:text-red-400" };
+function trustToStars(score: number): number {
+  if (score >= 80) return 5;
+  if (score >= 60) return 4;
+  if (score >= 40) return 3;
+  if (score >= 20) return 2;
+  return 1;
 }
 
 export default async function MePage() {
@@ -47,81 +52,93 @@ export default async function MePage() {
   );
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black">
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/feed"
-              className="text-xl font-bold text-zinc-900 dark:text-zinc-50"
-            >
-              The SLAs
+    <div className="min-h-screen bg-background">
+      {/* Nav */}
+      <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <span className="font-display text-sm font-bold text-primary-foreground">SR</span>
+            </div>
+            <span className="font-display text-lg font-bold text-foreground">The SLAs</span>
+          </Link>
+
+          <div className="hidden items-center gap-1 rounded-lg bg-secondary p-1 md:flex">
+            <Link href="/feed" className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground">
+              <Star className="h-4 w-4" /> Reviews
+            </Link>
+            <Link href="/?tab=discussions" className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground">
+              <MessageSquare className="h-4 w-4" /> Discussions
+            </Link>
+            <Link href="/software" className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground">
+              <Compass className="h-4 w-4" /> Browse
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3">
+            <Link href="/profile/setup" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              Edit profile
+            </Link>
             <LogoutButton />
           </div>
         </div>
-      </header>
+      </nav>
 
       <main className="mx-auto max-w-3xl px-4 py-8">
-        {/* Profile summary */}
-        <div className="mb-8 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
-                {session.user?.name ?? "Your profile"}
-              </h1>
-              {user?.role && (
-                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  {[user.seniority, user.role].filter(Boolean).join(" ")}
-                  {user.industry ? ` · ${user.industry}` : ""}
-                </p>
-              )}
-            </div>
-            <Link
-              href="/profile/setup"
-              className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-            >
-              Edit profile
-            </Link>
+        {/* Profile card */}
+        <div
+          className="mb-8 rounded-xl border border-border bg-card p-6"
+          style={{ boxShadow: "var(--shadow-card)" }}
+        >
+          <div className="flex items-center gap-3">
+            <h1 className="font-display text-xl font-bold text-foreground">
+              {session.user?.name ?? "Your profile"}
+            </h1>
+            {session.user?.username && (
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                @{session.user.username}
+              </span>
+            )}
           </div>
+          {user?.role && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {[user.seniority, user.role].filter(Boolean).join(" ")}
+              {user.industry ? ` · ${user.industry}` : ""}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your anonymous handle — shown instead of your name on all posts.
+          </p>
 
-          <div className="mt-4 grid grid-cols-3 gap-4 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-            <div>
-              <div className="text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
-                {posts.length}
+          <div className="mt-4 grid grid-cols-3 gap-4 border-t border-border pt-4">
+            {[
+              { value: posts.length, label: "insights shared" },
+              { value: threads.length, label: "discussions started" },
+              { value: totalValidationsReceived, label: "validations received" },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <div className="font-display text-xl font-bold tabular-nums text-foreground">
+                  {stat.value}
+                </div>
+                <div className="text-xs text-muted-foreground">{stat.label}</div>
               </div>
-              <div className="text-xs text-zinc-400">insights shared</div>
-            </div>
-            <div>
-              <div className="text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
-                {threads.length}
-              </div>
-              <div className="text-xs text-zinc-400">discussions started</div>
-            </div>
-            <div>
-              <div className="text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
-                {totalValidationsReceived}
-              </div>
-              <div className="text-xs text-zinc-400">validations received</div>
-            </div>
+            ))}
           </div>
         </div>
 
         {/* My insights */}
         <section className="mb-8">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <h2 className="mb-4 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             My insights ({posts.length})
           </h2>
           {posts.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-200 p-8 text-center dark:border-zinc-700">
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+            <div className="rounded-xl border border-dashed border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">
                 You haven&apos;t shared any insights yet.
               </p>
               <Link
                 href="/software"
-                className="mt-4 inline-block text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                className="mt-4 inline-block text-sm text-primary underline-offset-2 hover:underline"
               >
                 Browse software to contribute
               </Link>
@@ -129,44 +146,47 @@ export default async function MePage() {
           ) : (
             <div className="space-y-3">
               {posts.map((post) => {
-                const trust = getTrustLabel(post.trustScore);
+                const stars = trustToStars(post.trustScore);
                 const totalVal = post.validations.length;
                 return (
                   <Link
                     key={post.id}
-                    href={`/software/${post.software.slug}?dimension=${post.dimension}`}
-                    className="block rounded-lg border border-zinc-200 bg-white p-5 transition-all hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+                    href={`/software/${post.software.slug}/posts/${post.id}`}
+                    className="block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30"
+                    style={{ boxShadow: "var(--shadow-card)" }}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                          <span className="font-display font-semibold text-foreground">
                             {post.software.name}
                           </span>
-                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
                             {DIMENSION_LABELS[post.dimension]}
                           </span>
                           {post.moderationStatus === "flagged" && (
-                            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-600 dark:bg-orange-950 dark:text-orange-400">
+                            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">
                               flagged
                             </span>
                           )}
                         </div>
-                        <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                        <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
                           {post.content}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <span className={`text-xs font-medium ${trust.cls}`}>
-                          {trust.label}
-                        </span>
-                        <p className="mt-0.5 text-xs text-zinc-400">
+                        <div className="flex items-center gap-0.5">
+                          {[1,2,3,4,5].map((i) => (
+                            <Star key={i} className={`h-3 w-3 ${i <= stars ? "fill-accent text-accent" : "text-muted-foreground"}`} />
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {formatTimeAgo(post.createdAt)}
                         </p>
                       </div>
                     </div>
                     {totalVal > 0 && (
-                      <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         {totalVal} validation{totalVal !== 1 ? "s" : ""} received
                       </p>
                     )}
@@ -179,12 +199,12 @@ export default async function MePage() {
 
         {/* My threads */}
         <section>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <h2 className="mb-4 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             My discussions ({threads.length})
           </h2>
           {threads.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-200 p-8 text-center dark:border-zinc-700">
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+            <div className="rounded-xl border border-dashed border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">
                 You haven&apos;t started any discussions yet.
               </p>
             </div>
@@ -194,20 +214,17 @@ export default async function MePage() {
                 <Link
                   key={thread.id}
                   href={`/software/${thread.software.slug}/threads/${thread.id}`}
-                  className="block rounded-lg border border-zinc-200 bg-white p-5 transition-all hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+                  className="block rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30"
+                  style={{ boxShadow: "var(--shadow-card)" }}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                          {thread.software.name}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
-                        {thread.title}
-                      </p>
+                      <span className="font-display font-semibold text-foreground">
+                        {thread.software.name}
+                      </span>
+                      <p className="mt-1 text-sm text-muted-foreground">{thread.title}</p>
                     </div>
-                    <div className="shrink-0 text-right text-xs text-zinc-400">
+                    <div className="shrink-0 text-right text-xs text-muted-foreground">
                       <p>{thread._count.replies} replies</p>
                       <p className="mt-0.5">{formatTimeAgo(thread.createdAt)}</p>
                     </div>

@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The SLAs - Peer Software Reality Check",
+  title: "The SLAs — Honest Software Reviews Without the Politics",
   description:
-    "Honest, transparent, practitioner-driven insights about software",
+    "Real reviews from verified professionals. See how software performs from the hands-on builder to the executive buyer — completely anonymous.",
 };
 
 export default function RootLayout({

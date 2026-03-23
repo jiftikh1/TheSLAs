@@ -1,6 +1,8 @@
 import { getRecentPosts } from "@/lib/software";
 import { ValidationButtons } from "@/components/ValidationButtons";
+import { TOPICS } from "@/lib/review-questions";
 import Link from "next/link";
+import { ThumbsUp, ThumbsDown, Star, MessageSquare } from "lucide-react";
 
 type FeedPost = Awaited<ReturnType<typeof getRecentPosts>>[number];
 
@@ -11,43 +13,46 @@ const DIMENSION_LABELS: Record<string, string> = {
   ISSUES: "Issues",
 };
 
-function getTrustBadge(score: number): { label: string; className: string } {
-  if (score >= 67)
-    return {
-      label: "High confidence",
-      className:
-        "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400",
-    };
-  if (score >= 34)
-    return {
-      label: "Medium confidence",
-      className:
-        "bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400",
-    };
-  return {
-    label: "Low confidence",
-    className: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
-  };
+const DIMENSION_ICON: Record<string, "up" | "down"> = {
+  PARTNERSHIPS: "up",
+  INTEGRATIONS: "up",
+  WORKFLOWS: "up",
+  ISSUES: "down",
+};
+
+type SeniorityLevel = "ic" | "lead" | "director";
+
+function getSeniorityLevel(seniority: string | null): SeniorityLevel {
+  if (!seniority) return "ic";
+  const s = seniority.toLowerCase();
+  if (s.includes("vp") || s.includes("director") || s.includes("chief")) return "director";
+  if (s.includes("lead") || s.includes("manager") || s.includes("head") || s.includes("staff")) return "lead";
+  return "ic";
 }
 
-function formatCompanySize(size: string | null): string {
-  const map: Record<string, string> = {
-    small: "Small company",
-    medium: "Mid-size company",
-    large: "Large company",
-    enterprise: "Enterprise",
-  };
-  return size ? (map[size] ?? size) : "";
+const seniorityConfig: Record<SeniorityLevel, { label: string; className: string }> = {
+  ic: { label: "Hands-on IC", className: "bg-badge-ic/15 text-badge-ic border-badge-ic/30" },
+  lead: { label: "Team Lead", className: "bg-badge-lead/15 text-badge-lead border-badge-lead/30" },
+  director: { label: "Director+", className: "bg-badge-director/15 text-badge-director border-badge-director/30" },
+};
+
+function trustToStars(score: number): number {
+  if (score >= 80) return 5;
+  if (score >= 60) return 4;
+  if (score >= 40) return 3;
+  if (score >= 20) return 2;
+  return 1;
 }
 
 function formatTimeAgo(date: Date): string {
   const diffMs = Date.now() - new Date(date).getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 30) return `${diffDays}d ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return `${Math.floor(diffDays / 365)}y ago`;
+  return `${Math.floor(diffDays / 30)}mo ago`;
 }
 
 type Props = {
@@ -56,23 +61,15 @@ type Props = {
 };
 
 export function FeedPostCard({ post, currentUserId }: Props) {
-  const trust = getTrustBadge(post.trustScore);
-
-  const authorParts = [
-    post.author.seniority,
-    post.author.role,
-    post.author.industry,
-    formatCompanySize(post.author.companySize),
-  ].filter(Boolean);
+  const stars = post.starRating ?? trustToStars(post.trustScore);
+  const level = getSeniorityLevel(post.author.seniority);
+  const { label: seniorityLabel, className: badgeClass } = seniorityConfig[level];
+  const iconType = DIMENSION_ICON[post.dimension] ?? "up";
 
   const counts = {
     HELPFUL: post.validations.filter((v) => v.type === "HELPFUL").length,
-    MATCHES_EXPERIENCE: post.validations.filter(
-      (v) => v.type === "MATCHES_EXPERIENCE"
-    ).length,
-    LEARNED_SOMETHING: post.validations.filter(
-      (v) => v.type === "LEARNED_SOMETHING"
-    ).length,
+    MATCHES_EXPERIENCE: post.validations.filter((v) => v.type === "MATCHES_EXPERIENCE").length,
+    LEARNED_SOMETHING: post.validations.filter((v) => v.type === "LEARNED_SOMETHING").length,
   };
 
   const userValidations = currentUserId
@@ -83,54 +80,77 @@ export function FeedPostCard({ post, currentUserId }: Props) {
 
   const commentCount = post._count.comments;
   const postHref = `/software/${post.software.slug}/posts/${post.id}`;
+  const totalValidations = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
-    <article className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <Link href={postHref} className="block p-6 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors rounded-t-lg">
-        {/* Software + dimension context */}
-        <div className="mb-3 flex items-center gap-2">
-          <span
-            className="text-sm font-semibold text-zinc-900 dark:text-zinc-50"
-          >
-            {post.software.name}
-          </span>
-          <span className="text-zinc-300 dark:text-zinc-600">·</span>
-          <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-            {DIMENSION_LABELS[post.dimension] ?? post.dimension}
+    <article
+      className="rounded-xl border border-border bg-card transition-all duration-300 hover:border-primary/30"
+      style={{ boxShadow: "var(--shadow-card)" }}
+    >
+      <Link href={postHref} className="block p-6 transition-colors hover:bg-secondary/20 rounded-t-xl">
+        {/* Header */}
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h3 className="font-display text-lg font-semibold text-foreground">
+              {post.software.name}
+            </h3>
+            <span className="text-xs text-muted-foreground">{formatTimeAgo(post.createdAt)}</span>
+          </div>
+          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
+            {seniorityLabel}
           </span>
         </div>
 
-        {/* Author + trust */}
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {authorParts.length > 0
-              ? authorParts.join(" · ")
-              : "Anonymous practitioner"}
+        {/* Star rating */}
+        <div className="mb-4 flex items-center gap-0.5">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Star
+              key={i}
+              className={`h-4 w-4 ${i <= stars ? "fill-accent text-accent" : "text-muted-foreground"}`}
+            />
+          ))}
+        </div>
+
+        {/* Content with icon */}
+        <div className="mb-4 flex gap-2">
+          {iconType === "up" ? (
+            <ThumbsUp className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          ) : (
+            <ThumbsDown className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          )}
+          <p className="line-clamp-3 text-sm text-foreground/80">{post.content}</p>
+        </div>
+
+        {/* Dimension + username */}
+        <div className="border-t border-border pt-3 flex items-center justify-between gap-2">
+          <p className="text-sm italic text-muted-foreground">
+            &ldquo;{post.topic ? (TOPICS.find((t) => t.id === post.topic)?.label ?? DIMENSION_LABELS[post.dimension]) : DIMENSION_LABELS[post.dimension] ?? post.dimension} insight&rdquo;
           </p>
-          <div className="flex shrink-0 items-center gap-2">
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${trust.className}`}
-            >
-              {trust.label}
+          {post.author.username && (
+            <span className="shrink-0 text-xs text-muted-foreground/60">
+              @{post.author.username}
             </span>
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">
-              {formatTimeAgo(post.createdAt)}
+          )}
+        </div>
+
+        {/* Counts + author username */}
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ThumbsUp className="h-3.5 w-3.5" />
+              {totalValidations}
             </span>
+            {commentCount > 0 && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <MessageSquare className="h-3.5 w-3.5" />
+                {commentCount}
+              </span>
+            )}
           </div>
         </div>
-
-        {/* Content */}
-        <p className="mt-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-          {post.content}
-        </p>
-
-        {/* Comment count */}
-        <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
-          {commentCount} {commentCount === 1 ? "comment" : "comments"}
-        </p>
       </Link>
 
-      {/* Validations — outside the link to avoid nested <a> */}
+      {/* Validation buttons */}
       <div className="px-6 pb-4">
         <ValidationButtons
           postId={post.id}
